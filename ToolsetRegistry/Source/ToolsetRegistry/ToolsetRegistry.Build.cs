@@ -6,7 +6,13 @@ public class ToolsetRegistry : ModuleRules
 {
 	public ToolsetRegistry(ReadOnlyTargetRules Target) : base(Target)
 	{
-		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+		// For IWYU audits..
+		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs; // ..keep
+		IWYUSupport = IWYUSupport.Full;  // ..keep, can be None/Minimal/Full
+		bUseUnity = true; // ..toggle as needed, use false for IWYU audit
+
+
+		PublicDefinitions.Add("WITH_AIASSISTANT_EPIC_INTERNAL=1");
 
 		PublicIncludePaths.AddRange(
 			new string[] {
@@ -34,11 +40,21 @@ public class ToolsetRegistry : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
+				"AssetRegistry",
 				"CoreUObject",
+				"DeveloperSettings",
+				"EditorFramework",
+				"EditorScriptingUtilities",
+				"EditorSubsystem",
 				"Engine",
-				"Slate",
-				"SlateCore",
-				// ... add private dependencies that you statically link with here ...
+				"Json",
+				"JsonUtilities",
+				"JsonUtilitiesEditor",
+				"Kismet",
+				"PythonScriptPlugin",
+				"UnrealEd",
+				"FileSandboxCore",
+				"JsonSchema"
 			}
 			);
 
@@ -46,7 +62,6 @@ public class ToolsetRegistry : ModuleRules
 		DynamicallyLoadedModuleNames.AddRange(
 			new string[]
 			{
-				// ... add any modules that your module loads dynamically here ...
 			}
 			);
 	}
