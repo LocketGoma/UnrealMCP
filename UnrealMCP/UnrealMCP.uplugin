@@ -2,10 +2,11 @@
 	"FileVersion": 3,
 	"Version": 1,
 	"VersionName": "1.0",
-	"FriendlyName": "UnrealMCP",
 	"Description": "Backport of Unreal Engine 5.8 MCP for Unreal Engine 5.7.4 and earlier versions.",
 	"Category": "Editor",
-	"CreatedBy": "",
+	"FriendlyName": "Unreal MCP",
+	"NoRedist": true,
+	"CreatedBy": "Epic Games, Inc.",
 	"CreatedByURL": "",
 	"DocsURL": "",
 	"MarketplaceURL": "",
@@ -14,14 +15,44 @@
 	"IsBetaVersion": true,
 	"IsExperimentalVersion": true,
 	"Installed": false,
+	"EnabledByDefault": false,
 	"Modules": [
 		{
-			"Name": "UnrealMCP",
+			"Name": "ModelContextProtocol",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "ModelContextProtocolEngine",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "ModelContextProtocolEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "ModelContextProtocolTests",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "ModelContextProtocolEngineTests",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "ModelContextProtocolEditorTests",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [
+		{
+			"Name": "EngineAssetDefinitions",
+			"Enabled": true
+		},
 		{
 			"Name": "ToolsetRegistry",
 			"Enabled": true
