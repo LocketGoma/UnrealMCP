@@ -3,6 +3,7 @@
 #pragma once
 
 #include "Modules/ModuleManager.h"
+#include "MCPLogCompatibility.h"
 
 struct IModelContextProtocolResourceProvider;
 struct IModelContextProtocolTool;

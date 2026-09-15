@@ -77,7 +77,8 @@ public:
 	{
 		// FEngineAnalytics is initialized during post-engine-init, so defer the wiring.
 		// Consumers can override the provider at any time via IModelContextProtocolModule::SetAnalyticsProvider.
-		PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddLambda([this]()
+		// Note : 기존 로직인 5.8의 "GetOnPostEngineInit()" 의 경우, Singleton 방식을 활용해서 접근 방식을 변경함.
+		PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddLambda([this]()
 		{
 			RegisterDefaultAnalyticsProvider();
 		});
@@ -87,7 +88,7 @@ public:
 	{
 		if (PostEngineInitHandle.IsValid())
 		{
-			FCoreDelegates::GetOnPostEngineInit().Remove(PostEngineInitHandle);
+			FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
 			PostEngineInitHandle.Reset();
 		}
 

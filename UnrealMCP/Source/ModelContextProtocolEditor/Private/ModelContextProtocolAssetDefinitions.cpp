@@ -26,7 +26,9 @@ TConstArrayView<FAssetCategoryPath> UAssetDefinition_ModelContextProtocolToolLib
 {
 	static const auto Categories = 
 	{
-		FAssetCategoryPath(EAssetCategoryPaths::AI, LOCTEXT("AssetDefinition_ModelContextProtocolToolLibrarySubMenu", "Generative AI"), ECategoryMenuType::Section)
+		//5.7.4에서 지원하지 않는 추가 메타데이터 제거		
+		//FAssetCategoryPath(EAssetCategoryPaths::AI, LOCTEXT("AssetDefinition_ModelContextProtocolToolLibrarySubMenu", "Generative AI"), ECategoryMenuType::Section)
+		FAssetCategoryPath(EAssetCategoryPaths::AI, LOCTEXT("AssetDefinition_ModelContextProtocolToolLibrarySubMenu", "Generative AI"))
 	};
 	return Categories;
 }
@@ -50,7 +52,8 @@ TConstArrayView<FAssetCategoryPath> UAssetDefinition_ModelContextProtocolEditorT
 {
 	static const auto Categories = 
 	{
-		FAssetCategoryPath(EAssetCategoryPaths::AI, LOCTEXT("AssetDefinition_ModelContextProtocolEditorToolLibrarySubMenu", "Generative AI"), ECategoryMenuType::Section)
+		//5.7.4에서 지원하지 않는 추가 메타데이터 제거
+		FAssetCategoryPath(EAssetCategoryPaths::AI, LOCTEXT("AssetDefinition_ModelContextProtocolEditorToolLibrarySubMenu", "Generative AI"))
 	};
 	return Categories;
 }

@@ -13,6 +13,7 @@ public class ModelContextProtocolEngine : ModuleRules
 			{
 				"Core",
 				"DeveloperSettings",
+				"JsonSchema",
 				"ModelContextProtocol"
 			});
 

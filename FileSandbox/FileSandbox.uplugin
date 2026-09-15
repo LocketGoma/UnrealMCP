@@ -17,6 +17,11 @@
 	"Installed": false,
 	"Modules": [
 		{
+			"Name": "MCPCompatibility",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "FileSandboxCore",
 			"Type": "UncookedOnly",
 			"LoadingPhase": "Default"

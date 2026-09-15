@@ -50,6 +50,14 @@
 	],
 	"Plugins": [
 		{
+			"Name": "JsonUtilitiesEditor",
+			"Enabled": true
+		},
+		{
+			"Name": "FileSandbox",
+			"Enabled": true
+		},
+		{
 			"Name": "EngineAssetDefinitions",
 			"Enabled": true
 		},

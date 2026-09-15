@@ -297,7 +297,8 @@ namespace UE::ModelContextProtocol::Private
 
 		TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(UE::ModelContextProtocol::Private::FormatSSEMessage(ResponseStr), UE::ModelContextProtocol::ContentTypeEventStream);
 		Response->Code = EHttpServerResponseCodes::Ok;
-		EnumAddFlags(Response->Flags, EHttpServerResponseFlags::MultipleWriteStream | EHttpServerResponseFlags::HasAdditionalWrites | EHttpServerResponseFlags::SkipHeaderWrite);
+		//Note : Flag Add 만 있고, 플래그 검사하는 로직이 포함되지 않는것으로 보임. 우선 주석 처리.
+		//EnumAddFlags(Response->Flags, EHttpServerResponseFlags::MultipleWriteStream | EHttpServerResponseFlags::HasAdditionalWrites | EHttpServerResponseFlags::SkipHeaderWrite);
 
 		return Response;
 	}
@@ -320,7 +321,7 @@ namespace UE::ModelContextProtocol::Private
 
 		TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(UE::ModelContextProtocol::Private::FormatSSEMessage(ResponseStr), UE::ModelContextProtocol::ContentTypeEventStream);
 		Response->Code = EHttpServerResponseCodes::Ok;
-		EnumAddFlags(Response->Flags, EHttpServerResponseFlags::MultipleWriteStream | EHttpServerResponseFlags::HasAdditionalWrites | EHttpServerResponseFlags::SkipHeaderWrite);
+		//EnumAddFlags(Response->Flags, EHttpServerResponseFlags::MultipleWriteStream | EHttpServerResponseFlags::HasAdditionalWrites | EHttpServerResponseFlags::SkipHeaderWrite);
 
 		return Response;
 	}
@@ -852,7 +853,7 @@ bool FModelContextProtocolServer::ProcessToolCallJsonRpcCall(const FHttpServerRe
 		Response->Headers.Add(TEXT("Connection"), { TEXT("keep-alive") });
 		Response->Headers.Add(TEXT("Cache-Control"), { TEXT("no-cache") });
 		Response->Headers.Add(UE::ModelContextProtocol::Private::McpSessionIdHeader, { SessionId });
-		EnumAddFlags(Response->Flags, EHttpServerResponseFlags::MultipleWriteStream | EHttpServerResponseFlags::HasAdditionalWrites);
+		//EnumAddFlags(Response->Flags, EHttpServerResponseFlags::MultipleWriteStream | EHttpServerResponseFlags::HasAdditionalWrites);
 
 		OnComplete(MoveTemp(Response));
 	}
@@ -941,7 +942,7 @@ bool FModelContextProtocolServer::ProcessToolCallJsonRpcCall(const FHttpServerRe
 		// engine has no chunked-transfer path: HTTP/1.1 clients (libcurl, browser fetch) cannot
 		// detect end-of-message on the unframed body and would otherwise stall ~15s waiting for
 		// the keep-alive timeout to close the socket.
-		EnumAddFlags(ServerResponse->Flags, EHttpServerResponseFlags::MultipleWriteStream | EHttpServerResponseFlags::SkipHeaderWrite | EHttpServerResponseFlags::CloseAfterWrite);
+		//EnumAddFlags(ServerResponse->Flags, EHttpServerResponseFlags::MultipleWriteStream | EHttpServerResponseFlags::SkipHeaderWrite | EHttpServerResponseFlags::CloseAfterWrite);
 
 		OnComplete(MoveTemp(ServerResponse));
 	};

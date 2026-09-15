@@ -12,6 +12,7 @@ public class ModelContextProtocol : ModuleRules
 			new string[]
 			{
 				"Core",
+				"MCPCompatibility",
 				"Analytics",
 				"AnalyticsET",
 				"HTTPServer",

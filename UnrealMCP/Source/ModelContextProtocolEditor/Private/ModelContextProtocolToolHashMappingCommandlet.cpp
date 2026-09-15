@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "ModelContextProtocolToolHashMappingCommandlet.h"
+#include "MCPLogCompatibility.h"
 
 #include "IModelContextProtocolModule.h"
 #include "IModelContextProtocolTool.h"

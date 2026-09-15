@@ -23,7 +23,7 @@
 		},
 		{
 			"Name": "JsonSchema",
-			"Type": "Editor",
+			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		}
 	]
