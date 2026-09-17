@@ -38,7 +38,6 @@ public class EditorToolset : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				"UnrealMCP",
 				// ... add private dependencies that you statically link with here ...
 			}
 			);
