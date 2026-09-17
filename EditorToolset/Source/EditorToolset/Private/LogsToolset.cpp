@@ -10,10 +10,13 @@
 #include "Misc/CoreMisc.h"
 #include "Misc/FileHelper.h"
 #include "Logging/LogVerbosity.h"
+#include "Logging/LogMacros.h"
 #include "Misc/OutputDeviceNull.h"
 #include "Misc/Paths.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(LogsToolset)
+
+DEFINE_LOG_CATEGORY_STATIC(LogMCPMessage, Log, All);
 
 namespace
 {
@@ -53,6 +56,11 @@ namespace
 			Lines.Add(FString(V));
 		}
 	};
+}
+
+void ULogsToolset::WriteLog(const FString& Message)
+{
+	UE_LOG(LogMCPMessage, Display, TEXT("%s"), *Message);
 }
 
 TArray<FString> ULogsToolset::GetLogEntries(

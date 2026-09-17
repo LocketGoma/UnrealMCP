@@ -28,6 +28,8 @@
 #include "EngineUtils.h"
 #include "HAL/ConsoleManager.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Utils/ContentBrowserCompatibility.h"
+#include "Utils/EditorViewportCompatibility.h"
 #include "Utils/MCPCompatibilityUtils.h"
 #include "IAssetViewport.h"
 #include "LevelEditor.h"
@@ -47,7 +49,6 @@
 #include "Selection.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "Subsystems/UnrealEditorSubsystem.h"
 #include "Templates/SharedPointer.h"
 #include "ToolsetRegistry/DelegateHandle.h"
 #include "ToolsetRegistry/ToolCallAsyncResultImage.h"
@@ -432,16 +433,14 @@ FVector2D UEditorAppToolset::WorldPosToScreenCoords(FVector Position)
 		UE::MCP::Compatibility::RaiseScriptError(TEXT("Editor not found."));
 		return FVector2D::ZeroVector;
 	}
-	UUnrealEditorSubsystem* Subsystem = GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>();
-	check(Subsystem);
 	FVector2D ScreenCoords;
-	if (!Subsystem->WorldToScreen(Position, ScreenCoords))
+	if (!UE::EditorToolset::Compatibility::WorldToScreen(Position, ScreenCoords))
 	{
 		UE::MCP::Compatibility::RaiseScriptError(TEXT("Unable to convert position into screen space."));
 		return FVector2D::ZeroVector;
 	}
 	FIntPoint Size;
-	if (!Subsystem->GetLevelViewportSize(Size))
+	if (!UE::EditorToolset::Compatibility::GetLevelViewportSize(Size))
 	{
 		UE::MCP::Compatibility::RaiseScriptError(TEXT("Unable to retrieve viewport size."));
 		return FVector2D::ZeroVector;
@@ -468,17 +467,15 @@ FVector UEditorAppToolset::ScreenCoordsToWorld(FVector2D Coords, float TraceDist
 		UE::MCP::Compatibility::RaiseScriptError(TEXT("No world to query."));
 		return FVector::ZeroVector;
 	}
-	UUnrealEditorSubsystem* Subsystem = GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>();
-	check(Subsystem);
 	FIntPoint Size;
-	if (!Subsystem->GetLevelViewportSize(Size))
+	if (!UE::EditorToolset::Compatibility::GetLevelViewportSize(Size))
 	{
 		UE::MCP::Compatibility::RaiseScriptError(TEXT("Unable to retrieve viewport size."));
 		return FVector::ZeroVector;
 	}
 	FVector Origin, Direction;
 	const FVector2D PixelCoords(Coords.X * Size.X, Coords.Y * Size.Y);
-	if (!Subsystem->ScreenToWorld(PixelCoords, Origin, Direction))
+	if (!UE::EditorToolset::Compatibility::ScreenToWorld(PixelCoords, Origin, Direction))
 	{
 		UE::MCP::Compatibility::RaiseScriptError(TEXT("Unable to convert screen coordinates into world space."));
 		return FVector::ZeroVector;
@@ -505,10 +502,8 @@ FVector UEditorAppToolset::ScreenCoordsToWorld(FVector2D Coords, float TraceDist
 
 TArray<FString> UEditorAppToolset::GetSelectedAssets()
 {
-	FContentBrowserModule& ContentBrowserModule =
-		FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
 	TArray<FAssetData> AssetData;
-	ContentBrowserModule.Get().GetAllSelectedAssets(AssetData);
+	UE::EditorToolset::Compatibility::GetAllSelectedAssets(AssetData);
 	TArray<FString> Result;
 	for (const FAssetData& Data : AssetData)
 	{
@@ -541,10 +536,8 @@ UToolCallAsyncResultVoid* UEditorAppToolset::SelectAssets(const TArray<FString>&
 	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda(
 		[StrongResult, ExpectedPackages, StartTime = FPlatformTime::Seconds()](float) mutable -> bool
 		{
-			FContentBrowserModule& CBModule =
-				FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
 			TArray<FAssetData> SelectedAssets;
-			CBModule.Get().GetAllSelectedAssets(SelectedAssets);
+			UE::EditorToolset::Compatibility::GetAllSelectedAssets(SelectedAssets);
 			TSet<FName> SelectedPackages;
 			for (const FAssetData& Data : SelectedAssets)
 			{

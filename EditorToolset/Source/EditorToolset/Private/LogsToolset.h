@@ -8,7 +8,7 @@
 
 #include "LogsToolset.generated.h"
 
-/// Provides tools for reading the Unreal Engine output log and controlling
+/// Provides tools for reading and writing the Unreal Engine output log and controlling
 /// log category verbosity.
 UCLASS(BlueprintType, MinimalAPI)
 class ULogsToolset : public UToolsetDefinition
@@ -16,6 +16,13 @@ class ULogsToolset : public UToolsetDefinition
 	GENERATED_BODY()
 
 public:
+	/**
+	 * Writes a message to the Unreal Editor output log under LogMCPMessage at Display verbosity.
+	 * @param Message The text to write. May contain multiple lines.
+	 */
+	UFUNCTION(meta = (AICallable), Category = "LogsToolset")
+	static void WriteLog(const FString& Message);
+
 	/**
 	 * Returns log entries from the current session's log file.
 	 * @param Category If non-empty, only returns entries from this log category (e.g. "LogTemp").
