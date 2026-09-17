@@ -39,6 +39,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Modules/ModuleManager.h"
 #include "Misc/EngineVersionComparison.h"
+#include "Misc/EngineVersion.h"
 #include "Misc/ObjectThumbnail.h"
 #include "Misc/PackageName.h"
 #include "ObjectTools.h"
@@ -56,6 +57,7 @@
 #include "ToolsetRegistry/ToolsetImage.h"
 #include "UObject/StrongObjectPtr.h"
 #include "UObject/UObjectGlobals.h"
+#include "UObject/Package.h"
 
 #include "UnrealClient.h"
 
@@ -498,6 +500,22 @@ FVector UEditorAppToolset::ScreenCoordsToWorld(FVector2D Coords, float TraceDist
 		return FVector::ZeroVector;
 	}
 	return HitResult.Location;
+}
+
+FString UEditorAppToolset::GetEngineVersion()
+{
+	return FEngineVersion::Current().ToString();
+}
+
+FString UEditorAppToolset::GetCurrentLevel()
+{
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		UE::MCP::Compatibility::RaiseScriptError(TEXT("No editor world to query."));
+		return FString();
+	}
+	return World->GetOutermost()->GetName();
 }
 
 TArray<FString> UEditorAppToolset::GetSelectedAssets()

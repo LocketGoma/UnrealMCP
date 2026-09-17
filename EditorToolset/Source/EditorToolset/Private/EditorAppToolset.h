@@ -200,6 +200,15 @@ class UEditorAppToolset : public UToolsetDefinition
 {
 	GENERATED_BODY()
 public:
+	/** Returns the running engine's full version string without reading logs. */
+	UFUNCTION(meta = (AICallable))
+	static FString GetEngineVersion();
+
+	/** Returns the editor world's map package path (persistent map, not the active sublevel or PIE world).
+	 * Unsaved maps may have temporary paths. Raises an error if no editor world is available. */
+	UFUNCTION(meta = (AICallable))
+	static FString GetCurrentLevel();
+
 	/*
 	 * Finds all console variables that contain a given name.
 	 * @param Name The partial or full name to search for.
