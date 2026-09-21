@@ -589,6 +589,160 @@ void FModelContextProtocolToolsetRegistryTests::Define()
 			}));
 		});
 
+		It("should describe one tool without changing its schema or the full listing", [this]()
+		{
+			const TSharedPtr<IModelContextProtocolTool> DescribeTool =
+				IModelContextProtocolModule::GetChecked().FindTool(DescribeToolsetToolName);
+			if (!TestTrue("Describe tool is registered", DescribeTool.IsValid())) return;
+
+			auto ReadSchema = [this, &DescribeTool](const TSharedPtr<FJsonObject>& Arguments)
+			{
+				const FModelContextProtocolToolResult Result = DescribeTool->Run(Arguments);
+				TSharedPtr<FJsonObject> Schema;
+				bool bIsError = false;
+				Result.JsonObject->TryGetBoolField(TEXT("isError"), bIsError);
+				if (TestFalse("Describe succeeds", bIsError))
+				{
+					const FString Text = Result.JsonObject->GetArrayField(TEXT("content"))[0]->AsObject()->GetStringField(TEXT("text"));
+					FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Schema);
+				}
+				return Schema;
+			};
+
+			TSharedRef<FJsonObject> Arguments = MakeShared<FJsonObject>();
+			Arguments->SetStringField(TEXT("toolset_name"), MockToolsetName);
+			Arguments->SetBoolField(TEXT("summary_only"), false);
+			const TSharedPtr<FJsonObject> FullSchema = ReadSchema(Arguments);
+			if (!TestTrue("Full schema is valid", FullSchema.IsValid())) return;
+			const TArray<TSharedPtr<FJsonValue>>& FullTools = FullSchema->GetArrayField(TEXT("tools"));
+			const TSharedPtr<FJsonValue>* ExpectedTool = FullTools.FindByPredicate([](const TSharedPtr<FJsonValue>& Tool)
+			{
+				return Tool->AsObject()->GetStringField(TEXT("name")) == GreetToolName;
+			});
+			if (!TestTrue("Full listing contains Greet", ExpectedTool != nullptr)) return;
+
+			for (const FString& Name : {GreetBareName, GreetToolName})
+			{
+				Arguments->SetStringField(TEXT("tool_name"), Name);
+				const TSharedPtr<FJsonObject> Filtered = ReadSchema(Arguments);
+				if (!TestTrue("Filtered schema is valid", Filtered.IsValid())) continue;
+				const TArray<TSharedPtr<FJsonValue>>& Tools = Filtered->GetArrayField(TEXT("tools"));
+				if (TestEqual("Only one tool returned", Tools.Num(), 1))
+				{
+					TestEqual("Selected tool retains its complete schema",
+						JsonObjectToString(Tools[0]->AsObject().ToSharedRef()),
+						JsonObjectToString((*ExpectedTool)->AsObject().ToSharedRef()));
+				}
+				Filtered->RemoveField(TEXT("tools"));
+				TSharedPtr<FJsonObject> Metadata = MakeShared<FJsonObject>(*FullSchema);
+				Metadata->RemoveField(TEXT("tools"));
+				TestEqual("Toolset metadata is preserved", JsonObjectToString(Filtered.ToSharedRef()), JsonObjectToString(Metadata.ToSharedRef()));
+			}
+
+			Arguments->RemoveField(TEXT("tool_name"));
+			const TSharedPtr<FJsonObject> FullAgain = ReadSchema(Arguments);
+			if (TestTrue("Full listing still available", FullAgain.IsValid()))
+			{
+				TestEqual("Filtering does not change later full listings", FullAgain->GetArrayField(TEXT("tools")).Num(), FullTools.Num());
+			}
+		});
+
+		It("should browse summaries and then retrieve the unchanged full tool schema", [this]()
+		{
+			const TSharedPtr<IModelContextProtocolTool> DescribeTool =
+				IModelContextProtocolModule::GetChecked().FindTool(DescribeToolsetToolName);
+			if (!TestTrue("Describe tool is registered", DescribeTool.IsValid())) return;
+			auto ReadDescription = [this, &DescribeTool](const TSharedPtr<FJsonObject>& Arguments)
+			{
+				const FModelContextProtocolToolResult Result = DescribeTool->Run(Arguments);
+				bool bError = false;
+				Result.JsonObject->TryGetBoolField(TEXT("isError"), bError);
+				TSharedPtr<FJsonObject> Json;
+				if (TestFalse("Description succeeds", bError))
+				{
+					const FString Text = Result.JsonObject->GetArrayField(TEXT("content"))[0]->AsObject()->GetStringField(TEXT("text"));
+					FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Json);
+				}
+				return Json;
+			};
+			TSharedRef<FJsonObject> Arguments = MakeShared<FJsonObject>();
+			Arguments->SetStringField(TEXT("toolset_name"), MockToolsetName);
+			const TSharedPtr<FJsonObject> Summary = ReadDescription(Arguments);
+			Arguments->SetBoolField(TEXT("summary_only"), false);
+			const TSharedPtr<FJsonObject> Full = ReadDescription(Arguments);
+			if (!TestTrue("Both descriptions are valid", Full.IsValid() && Summary.IsValid())) return;
+			Arguments->SetBoolField(TEXT("summary_only"), true);
+			const TSharedPtr<FJsonObject> ExplicitSummary = ReadDescription(Arguments);
+			if (TestTrue("Explicit summary is valid", ExplicitSummary.IsValid()))
+			{
+				TestEqual("Omitting summary_only uses the summary response",
+					JsonObjectToString(Summary.ToSharedRef()), JsonObjectToString(ExplicitSummary.ToSharedRef()));
+			}
+			TestTrue("Schema advertises summary mode by default", DescribeTool->GetInputJsonSchema()
+				->GetObjectField(TEXT("properties"))->GetObjectField(TEXT("summary_only"))->GetBoolField(TEXT("default")));
+			const TArray<TSharedPtr<FJsonValue>>& FullTools = Full->GetArrayField(TEXT("tools"));
+			const TArray<TSharedPtr<FJsonValue>>& BriefTools = Summary->GetArrayField(TEXT("tools"));
+			TestEqual("Summary includes all enabled tools", BriefTools.Num(), FullTools.Num());
+			TestTrue("Summary mode is explicit", Summary->GetBoolField(TEXT("summaryOnly")));
+			for (const TSharedPtr<FJsonValue>& BriefValue : BriefTools)
+			{
+				const TSharedPtr<FJsonObject> Brief = BriefValue->AsObject();
+				TestEqual("Summary contains only name and description", Brief->Values.Num(), 2);
+				const FString Name = Brief->GetStringField(TEXT("name"));
+				TestTrue("Tool name is preserved", FullTools.ContainsByPredicate([&Name](const TSharedPtr<FJsonValue>& Tool)
+				{
+					return Tool->AsObject()->GetStringField(TEXT("name")) == Name;
+				}));
+				const FString Description = Brief->GetStringField(TEXT("description"));
+				TestTrue("Description is bounded", Description.Len() <= 160);
+				TestFalse("Description has no newline", Description.Contains(TEXT("\n")) || Description.Contains(TEXT("\r")));
+			}
+			TestTrue("Summary response is smaller", JsonObjectToString(Summary.ToSharedRef()).Len() < JsonObjectToString(Full.ToSharedRef()).Len());
+
+			Arguments->SetStringField(TEXT("tool_name"), GreetBareName);
+			const TSharedPtr<FJsonObject> Single = ReadDescription(Arguments);
+			if (TestTrue("Single summary is valid", Single.IsValid()))
+			{
+				TestEqual("Summary supports the tool filter", Single->GetArrayField(TEXT("tools")).Num(), 1);
+			}
+			Arguments->SetBoolField(TEXT("summary_only"), false);
+			const TSharedPtr<FJsonObject> Detailed = ReadDescription(Arguments);
+			if (TestTrue("Full detail still available", Detailed.IsValid()))
+			{
+				const TSharedPtr<FJsonObject> Tool = Detailed->GetArrayField(TEXT("tools"))[0]->AsObject();
+				TestTrue("Input schema restored", Tool->HasField(TEXT("inputSchema")));
+				TestEqual("Requested name is preserved", Tool->GetStringField(TEXT("name")), GreetToolName);
+			}
+			Arguments->SetStringField(TEXT("summary_only"), TEXT("true"));
+			const FModelContextProtocolToolResult Invalid = DescribeTool->Run(Arguments);
+			bool bError = false;
+			Invalid.JsonObject->TryGetBoolField(TEXT("isError"), bError);
+			TestTrue("Non-boolean summary flag is rejected", bError);
+		});
+
+		It("should reject invalid or unknown tool filters without returning the full listing", [this]()
+		{
+			const TSharedPtr<IModelContextProtocolTool> DescribeTool =
+				IModelContextProtocolModule::GetChecked().FindTool(DescribeToolsetToolName);
+			if (!TestTrue("Describe tool is registered", DescribeTool.IsValid())) return;
+			const TArray<TSharedPtr<FJsonValue>> InvalidNames = {
+				MakeShared<FJsonValueString>(TEXT("")), MakeShared<FJsonValueString>(TEXT("MissingTool")),
+				MakeShared<FJsonValueString>(TEXT("greet")), MakeShared<FJsonValueString>(TEXT("OtherToolset.Greet")),
+				MakeShared<FJsonValueNumber>(1), MakeShared<FJsonValueNull>()};
+			for (const TSharedPtr<FJsonValue>& Name : InvalidNames)
+			{
+				TSharedRef<FJsonObject> Arguments = MakeShared<FJsonObject>();
+				Arguments->SetStringField(TEXT("toolset_name"), MockToolsetName);
+				Arguments->SetField(TEXT("tool_name"), Name);
+				const FModelContextProtocolToolResult Result = DescribeTool->Run(Arguments);
+				bool bIsError = false;
+				Result.JsonObject->TryGetBoolField(TEXT("isError"), bIsError);
+				TestTrue("Invalid filter returns an error", bIsError);
+				const FString Text = Result.JsonObject->GetArrayField(TEXT("content"))[0]->AsObject()->GetStringField(TEXT("text"));
+				TestFalse("Error does not include full tool schemas", Text.Contains(TEXT("\"tools\"")));
+			}
+		});
+
 		LatentIt("should dispatch a toolset tool through call_tool", [this](const FDoneDelegate& Done)
 		{
 			InitializeSession(FDoneDelegate::CreateLambda([this, Done]()

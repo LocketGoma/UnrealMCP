@@ -8,6 +8,7 @@
 #include "Misc/Guid.h"
 
 #include "LogsToolset.h"
+#include "EditorToolsetSettings.h"
 #include "ToolsetRegistry/ToolCallExceptionHandler.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -159,6 +160,35 @@ void FLogsToolsetSpec::Define()
 				TestEqual(TEXT("Returns the most recent entries"),
 					Limited, TArray<FString>(All.GetData() + All.Num() - Limit, Limit));
 			}
+		});
+
+		It(TEXT("Uses the editor log limit while preserving explicit limits and chronological order"), [this]()
+		{
+			UEditorToolsetSettings* Settings = GetMutableDefault<UEditorToolsetSettings>();
+			TGuardValue<int32> RestoreLimit(Settings->DefaultLogMaxEntries, 2);
+			const FString Marker = FString::Printf(TEXT("MCPLogLimit_%s"), *FGuid::NewGuid().ToString());
+			for (int32 Index = 0; Index < 5; ++Index)
+			{
+				UE_LOG(LogLogsToolsetTest, Display, TEXT("%s entry %d"), *Marker, Index);
+			}
+			GLog->Flush();
+
+			const TArray<FString> All = ULogsToolset::GetLogEntries(TEXT(""), Marker, 0);
+			if (!TestEqual(TEXT("Explicit zero returns all matches"), All.Num(), 5)) return;
+			const TArray<FString> DefaultEntries = ULogsToolset::GetLogEntries(TEXT(""), Marker);
+			TestEqual(TEXT("Default uses configured number of newest entries"), DefaultEntries,
+				TArray<FString>(All.GetData() + 3, 2));
+			TestEqual(TEXT("Explicit preference sentinel uses the same limit"),
+				ULogsToolset::GetLogEntries(TEXT(""), Marker, -1), DefaultEntries);
+			TestEqual(TEXT("Explicit positive count overrides the preference"),
+				ULogsToolset::GetLogEntries(TEXT(""), Marker, 3), TArray<FString>(All.GetData() + 2, 3));
+
+			Settings->DefaultLogMaxEntries = 1;
+			TestEqual(TEXT("Preference changes apply on the next query"),
+				ULogsToolset::GetLogEntries(TEXT(""), Marker), TArray<FString>(All.GetData() + 4, 1));
+			Settings->DefaultLogMaxEntries = 0;
+			TestEqual(TEXT("Invalid config cannot accidentally enable unlimited output"),
+				ULogsToolset::GetLogEntries(TEXT(""), Marker).Num(), 1);
 		});
 
 		It(TEXT("Combines category and pattern filters"), [this]()

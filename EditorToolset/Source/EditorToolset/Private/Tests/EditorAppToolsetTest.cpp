@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "CoreMinimal.h"
+#include "HAL/IConsoleManager.h"
 #include "Dom/JsonObject.h"
 #include "Misc/AutomationTest.h"
 #include "Serialization/JsonReader.h"
@@ -19,6 +20,7 @@
 #include "Subsystems/UnrealEditorSubsystem.h"
 #include "UObject/StrongObjectPtr.h"
 #include "EditorAppToolset.h"
+#include "EditorToolsetSettings.h"
 #include "EditorAppToolsetTestUtilities.h"
 #include "ToolsetRegistry/ToolCallAsyncResultVoid.h"
 #include "ToolsetRegistry/ToolCallAsyncResultImage.h"
@@ -41,6 +43,13 @@ namespace
 		return JsonObject;
 	}
 
+	TSharedPtr<FJsonObject> ParseCVarResults(const FString& JsonString)
+	{
+		const TSharedPtr<FJsonObject> Page = ParseJsonObject(JsonString);
+		const TSharedPtr<FJsonObject>* Results = nullptr;
+		return Page.IsValid() && Page->TryGetObjectField(TEXT("results"), Results) ? *Results : nullptr;
+	}
+
 	template<typename CVarTypeT>
 	struct FCVarTestFixture
 	{
@@ -54,7 +63,7 @@ namespace
 		TSharedPtr<FJsonObject> FindCVarJsonData() const
 		{
 			TSharedPtr<FJsonObject> CVarJsonData =
-				ParseJsonObject(UEditorAppToolset::SearchCVars(CVarNamespace));
+				ParseCVarResults(UEditorAppToolset::SearchCVars(CVarName, 0));
 			if (!CVarJsonData)
 			{
 				return nullptr;
@@ -72,10 +81,22 @@ namespace
 
 BEGIN_DEFINE_SPEC(FEditorAppToolsetSpec, "AI.Toolsets.EditorToolset.EditorAppToolsetSpec",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+	bool bSavedIncludeCVarHelp = false;
 END_DEFINE_SPEC(FEditorAppToolsetSpec)
 
 void FEditorAppToolsetSpec::Define()
 {
+	BeforeEach([this]()
+	{
+		UEditorToolsetSettings* Settings = GetMutableDefault<UEditorToolsetSettings>();
+		bSavedIncludeCVarHelp = Settings->bIncludeCVarHelp;
+		Settings->bIncludeCVarHelp = false;
+	});
+	AfterEach([this]()
+	{
+		GetMutableDefault<UEditorToolsetSettings>()->bIncludeCVarHelp = bSavedIncludeCVarHelp;
+	});
+
 	It(TEXT("Can find a bool cvar"), [this]()
 	{
 		FCVarTestFixture<bool> Fixture(true);
@@ -85,8 +106,7 @@ void FEditorAppToolsetSpec::Define()
 		{
 			return;
 		}
-		TestEqual("CVar", CommandJson->GetStringField(
-			FString(TEXT("help"))), Fixture.CVar->GetHelp());
+		TestFalse("Default response omits help", CommandJson->HasField(TEXT("help")));
 		bool Value = false;
 		TestTrue("CVar", CommandJson->TryGetBoolField(
 			FString(TEXT("value")), Value));
@@ -102,8 +122,7 @@ void FEditorAppToolsetSpec::Define()
 		{
 			return;
 		}
-		TestEqual("CVar", CommandJson->GetStringField(
-			FString(TEXT("help"))), Fixture.CVar->GetHelp());
+		TestFalse("Default response omits help", CommandJson->HasField(TEXT("help")));
 		int32 Value = 0;
 		TestTrue("CVar", CommandJson->TryGetNumberField(FString(TEXT("value")), Value));
 		TestEqual("CVar", Value, Fixture.CVar->AsVariable()->GetInt());
@@ -118,8 +137,7 @@ void FEditorAppToolsetSpec::Define()
 		{
 			return;
 		}
-		TestEqual("CVar", CommandJson->GetStringField(
-			FString(TEXT("help"))), Fixture.CVar->GetHelp());
+		TestFalse("Default response omits help", CommandJson->HasField(TEXT("help")));
 		float Value = 0;
 		TestTrue("CVar", CommandJson->TryGetNumberField(
 			FString(TEXT("value")), Value));
@@ -135,12 +153,95 @@ void FEditorAppToolsetSpec::Define()
 		{
 			return;
 		}
-		TestEqual("CVar", CommandJson->GetStringField(
-			FString(TEXT("help"))), Fixture.CVar->GetHelp());
+		TestFalse("Default response omits help", CommandJson->HasField(TEXT("help")));
 		FString Value;
 		TestTrue("CVar", CommandJson->TryGetStringField(
 			FString(TEXT("value")), Value));
 		TestEqual("CVar", Value, Fixture.CVar->AsVariable()->GetString());
+	});
+
+	It(TEXT("CVar help follows editor preferences without changing matches or values"), [this]()
+	{
+		FCVarTestFixture<int> Fixture(5);
+		const FString CompactText = UEditorAppToolset::SearchCVars(Fixture.CVarName);
+		GetMutableDefault<UEditorToolsetSettings>()->bIncludeCVarHelp = true;
+		const FString DetailedText = UEditorAppToolset::SearchCVars(Fixture.CVarName);
+		GetMutableDefault<UEditorToolsetSettings>()->bIncludeCVarHelp = false;
+		TestEqual("Turning help off takes effect on the next query",
+			UEditorAppToolset::SearchCVars(Fixture.CVarName), CompactText);
+		const TSharedPtr<FJsonObject> Compact = ParseCVarResults(CompactText);
+		const TSharedPtr<FJsonObject> Detailed = ParseCVarResults(DetailedText);
+		if (!TestTrue("Both responses are valid JSON", Compact.IsValid() && Detailed.IsValid())) return;
+		TestEqual("Search matches are unchanged", Compact->Values.Num(), Detailed->Values.Num());
+		for (const auto& Entry : Compact->Values)
+		{
+			const TSharedPtr<FJsonObject>* DetailedEntry = nullptr;
+			if (!TestTrue("Match is present in detailed response", Detailed->TryGetObjectField(Entry.Key, DetailedEntry))) continue;
+			TestFalse("Compact entry has no help", Entry.Value->AsObject()->HasField(TEXT("help")));
+			TestTrue("Detailed entry has help", (*DetailedEntry)->HasField(TEXT("help")));
+			TestEqual("Current value is unchanged", Entry.Value->AsObject()->GetNumberField(TEXT("value")),
+				(*DetailedEntry)->GetNumberField(TEXT("value")));
+		}
+		const TSharedPtr<FJsonObject>* FixtureEntry = nullptr;
+		if (TestTrue("Fixture is included", Detailed->TryGetObjectField(Fixture.CVarName, FixtureEntry)))
+		{
+			TestEqual("Full help is preserved when requested", (*FixtureEntry)->GetStringField(TEXT("help")), Fixture.CVar->GetHelp());
+		}
+		TestTrue("Default response is smaller", CompactText.Len() < DetailedText.Len());
+	});
+
+	It(TEXT("CVar pages are stable, bounded, and report remaining results"), [this]()
+	{
+		UEditorToolsetSettings* Settings = GetMutableDefault<UEditorToolsetSettings>();
+		TGuardValue<int32> RestorePageSize(Settings->DefaultCVarPageSize, 2);
+		const FString Prefix = TEXT("toolset.page.");
+		const FString NameA = Prefix + TEXT("A");
+		const FString NameB = Prefix + TEXT("B");
+		const FString NameC = Prefix + TEXT("C");
+		const FString DisabledName = Prefix + TEXT("Disabled");
+		const FString CommandName = Prefix + TEXT("Command");
+		TAutoConsoleVariable<int32> C(*NameC, 3, TEXT("C help"));
+		TAutoConsoleVariable<int32> A(*NameA, 1, TEXT("A help"));
+		TAutoConsoleVariable<int32> B(*NameB, 2, TEXT("B help"));
+		TAutoConsoleVariable<int32> Disabled(*DisabledName, 0, TEXT("Disabled"), ECVF_Unregistered);
+		FAutoConsoleCommand Command(*CommandName, TEXT("Not a variable"), FConsoleCommandDelegate::CreateLambda([]() {}));
+
+		const TSharedPtr<FJsonObject> First = ParseJsonObject(UEditorAppToolset::SearchCVars(Prefix));
+		if (!TestTrue("Page is valid", First.IsValid())) return;
+		TestEqual("Counts enabled variables only", First->GetIntegerField(TEXT("totalMatches")), 3);
+		TestEqual("Uses configured page size", First->GetIntegerField(TEXT("returnedCount")), 2);
+		TestTrue("More results available", First->GetBoolField(TEXT("hasMore")));
+		TestEqual("Next offset", First->GetIntegerField(TEXT("nextOffset")), 2);
+		const TSharedPtr<FJsonObject> FirstItems = First->GetObjectField(TEXT("results"));
+		TestTrue("First alphabetical variable", FirstItems->HasField(NameA));
+		TestTrue("Second alphabetical variable", FirstItems->HasField(NameB));
+		TestFalse("Later variable is excluded", FirstItems->HasField(NameC));
+
+		const TSharedPtr<FJsonObject> Last = ParseJsonObject(UEditorAppToolset::SearchCVars(Prefix, -1, 2));
+		if (!TestTrue("Last page is valid", Last.IsValid())) return;
+		TestEqual("Last page count", Last->GetIntegerField(TEXT("returnedCount")), 1);
+		TestTrue("Last variable is included", Last->GetObjectField(TEXT("results"))->HasField(NameC));
+		TestFalse("Last page has no more results", Last->GetBoolField(TEXT("hasMore")));
+		TestFalse("Last page has no next offset", Last->HasField(TEXT("nextOffset")));
+
+		const TSharedPtr<FJsonObject> Explicit = ParseJsonObject(UEditorAppToolset::SearchCVars(Prefix, 1));
+		const TSharedPtr<FJsonObject> Unlimited = ParseJsonObject(UEditorAppToolset::SearchCVars(Prefix, 0));
+		const TSharedPtr<FJsonObject> PastEnd = ParseJsonObject(UEditorAppToolset::SearchCVars(Prefix, 2, MAX_int32));
+		const TSharedPtr<FJsonObject> NoMatches = ParseJsonObject(UEditorAppToolset::SearchCVars(TEXT("toolset.page.NoSuchVariable")));
+		if (!TestTrue("Boundary responses are valid", Explicit.IsValid() && Unlimited.IsValid() && PastEnd.IsValid() && NoMatches.IsValid())) return;
+		TestEqual("Explicit limit overrides preference", Explicit->GetIntegerField(TEXT("returnedCount")), 1);
+		TestEqual("Explicit zero returns all matches", Unlimited->GetIntegerField(TEXT("returnedCount")), 3);
+		TestEqual("Offset past end is empty", PastEnd->GetIntegerField(TEXT("returnedCount")), 0);
+		TestFalse("Offset past end has no more results", PastEnd->GetBoolField(TEXT("hasMore")));
+		TestEqual("No matches reports zero total", NoMatches->GetIntegerField(TEXT("totalMatches")), 0);
+		TestEqual("Empty results still have page metadata", NoMatches->GetIntegerField(TEXT("returnedCount")), 0);
+	});
+
+	It(TEXT("CVar pages reject a negative offset"), [this]()
+	{
+		UE::ToolsetRegistry::FToolCallExceptionHandler Handler;
+		Handler.CaptureErrorsIn([]() { UEditorAppToolset::SearchCVars(TEXT("r."), 2, -1); });
+		TestFalse("Invalid offset is reported", Handler.GetException().IsEmpty());
 	});
 
 	It(TEXT("Can get default values from cvars"), [this]()
@@ -162,7 +263,7 @@ void FEditorAppToolsetSpec::Define()
 		FString CVarName(TEXT("toolset.test.TestDisabled"));
 		TAutoConsoleVariable<bool> CVar(*CVarName, true, TEXT("A disabled cvar."), ECVF_Unregistered);
 		FString CVarJsonString = UEditorAppToolset::SearchCVars(CVarName);
-		TSharedPtr<FJsonObject> CVarJsonData = ParseJsonObject(CVarJsonString);
+		TSharedPtr<FJsonObject> CVarJsonData = ParseCVarResults(CVarJsonString);
 		TestTrue("CVar", CVarJsonData.IsValid());
 		TestEqual("CVar", CVarJsonData->Values.Num(), 0);
 	});

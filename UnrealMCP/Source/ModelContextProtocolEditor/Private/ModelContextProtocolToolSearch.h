@@ -39,8 +39,7 @@ private:
 };
 
 /**
- * Returns detailed information about a specific toolset including all tool names,
- * descriptions, and input schemas. Use this to inspect a toolset before calling its tools.
+ * Returns toolset summaries by default, with optional complete schemas and a single-tool filter.
  */
 struct FDescribeToolsetTool : IModelContextProtocolTool
 {
@@ -49,7 +48,7 @@ struct FDescribeToolsetTool : IModelContextProtocolTool
 	virtual FString GetName() const override { return UE::ModelContextProtocol::DescribeToolsetName; }
 	virtual FString GetDescription() const override
 	{
-		return TEXT("Get detailed information about a toolset including all tool names, descriptions, and input schemas.");
+		return TEXT("Browse tool names and short descriptions by default (summary_only=true). Set summary_only=false for complete schemas; specify tool_name to limit the response to one tool.");
 	}
 	virtual TSharedPtr<FJsonObject> GetInputJsonSchema() const override;
 	virtual FModelContextProtocolToolResult Run(const TSharedPtr<FJsonObject>& Params) override;

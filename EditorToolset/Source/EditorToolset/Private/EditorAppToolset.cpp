@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "EditorAppToolset.h"
+#include "EditorToolsetSettings.h"
 
 #include "Animation/AnimationAsset.h"
 #include "Animation/Skeleton.h"
@@ -213,26 +214,62 @@ namespace
 
 }
 
-FString UEditorAppToolset::SearchCVars(const FString& Name)
+FString UEditorAppToolset::SearchCVars(const FString& Name, int32 MaxResults, int32 Offset)
 {
-	TSharedPtr<FJsonObject> Results = MakeShared<FJsonObject>();
-	const auto OnConsoleVariable = [&Results](const TCHAR* Name, IConsoleObject* CVar)
+	if (Offset < 0)
 	{
-		if (TSharedPtr<FJsonObject> CVarJson = CVarToJson(CVar->AsVariable()))
+		UE::MCP::Compatibility::RaiseScriptError(TEXT("Offset must be zero or greater."));
+		return FString();
+	}
+
+	const UEditorToolsetSettings* Settings = GetDefault<UEditorToolsetSettings>();
+	const int32 Limit = MaxResults < 0 ? FMath::Max(1, Settings->DefaultCVarPageSize) : MaxResults;
+	TArray<TPair<FString, IConsoleVariable*>> Matches;
+	const auto OnConsoleVariable = [&Matches](const TCHAR* VariableName, IConsoleObject* Object)
+	{
+		IConsoleVariable* Variable = Object ? Object->AsVariable() : nullptr;
+		if (Variable && Variable->IsEnabled())
 		{
-			Results->SetObjectField(Name, CVarJson);
+			Matches.Emplace(FString(VariableName), Variable);
 		}
 	};
-	IConsoleManager& ConsoleManager = IConsoleManager::Get();
-	ConsoleManager.ForEachConsoleObjectThatContains(FConsoleObjectVisitor::CreateLambda(OnConsoleVariable), *Name);
+	IConsoleManager::Get().ForEachConsoleObjectThatContains(
+		FConsoleObjectVisitor::CreateLambda(OnConsoleVariable), *Name);
+	Matches.Sort([](const TPair<FString, IConsoleVariable*>& A, const TPair<FString, IConsoleVariable*>& B)
+	{
+		return A.Key.Compare(B.Key, ESearchCase::CaseSensitive) < 0;
+	});
+
+	const int32 Start = FMath::Min(Offset, Matches.Num());
+	const int32 Count = Limit == 0 ? Matches.Num() - Start : FMath::Min(Limit, Matches.Num() - Start);
+	const int32 End = Start + Count;
+	TSharedRef<FJsonObject> Results = MakeShared<FJsonObject>();
+	for (int32 Index = Start; Index < End; ++Index)
+	{
+		if (TSharedPtr<FJsonObject> Value = CVarToJson(Matches[Index].Value, Settings->bIncludeCVarHelp))
+		{
+			Results->SetObjectField(Matches[Index].Key, Value);
+		}
+	}
+
+	TSharedRef<FJsonObject> Page = MakeShared<FJsonObject>();
+	Page->SetObjectField(TEXT("results"), Results);
+	Page->SetNumberField(TEXT("totalMatches"), Matches.Num());
+	Page->SetNumberField(TEXT("offset"), Offset);
+	Page->SetNumberField(TEXT("returnedCount"), Results->Values.Num());
+	Page->SetBoolField(TEXT("hasMore"), End < Matches.Num());
+	if (End < Matches.Num())
+	{
+		Page->SetNumberField(TEXT("nextOffset"), End);
+	}
 	FString JsonString;
-	TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> JsonWriter =
+	const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
 		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&JsonString);
-	FJsonSerializer::Serialize(Results.ToSharedRef(), JsonWriter);
+	FJsonSerializer::Serialize(Page, Writer);
 	return JsonString;
 }
 
-TSharedPtr<FJsonObject> UEditorAppToolset::CVarToJson(IConsoleObject* CVar)
+TSharedPtr<FJsonObject> UEditorAppToolset::CVarToJson(IConsoleObject* CVar, bool bIncludeHelp)
 {
 	if (!CVar || !CVar->IsEnabled())
 	{
@@ -240,7 +277,10 @@ TSharedPtr<FJsonObject> UEditorAppToolset::CVarToJson(IConsoleObject* CVar)
 	}
 
 	TSharedPtr<FJsonObject> CVarData = MakeShared<FJsonObject>();
-	CVarData->SetStringField(FString(TEXT("help")), CVar->GetHelp());
+	if (bIncludeHelp)
+	{
+		CVarData->SetStringField(FString(TEXT("help")), CVar->GetHelp());
+	}
 	if (IConsoleVariable* Variable = CVar->AsVariable())
 	{
 		if (Variable->IsVariableBool())

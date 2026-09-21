@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "LogsToolset.h"
+#include "EditorToolsetSettings.h"
 
 #include "HAL/FileManager.h"
 #include "HAL/PlatformOutputDevices.h"
@@ -66,6 +67,11 @@ void ULogsToolset::WriteLog(const FString& Message)
 TArray<FString> ULogsToolset::GetLogEntries(
 	const FString& Category, const FString& Pattern, int32 MaxEntries)
 {
+	if (MaxEntries < 0)
+	{
+		MaxEntries = FMath::Max(1, GetDefault<UEditorToolsetSettings>()->DefaultLogMaxEntries);
+	}
+
 	if (!Category.IsEmpty())
 	{
 		const TArray<FString> Known = GetLogCategories(Category);

@@ -22,6 +22,7 @@ public class EditorToolset : ModuleRules
 				"ContentBrowser",
 				"ContentBrowserData",
 				"CoreUObject",
+				"DeveloperSettings",
 				"EditorFramework",
 				"EditorScriptingUtilities",
 				"EditorSubsystem",

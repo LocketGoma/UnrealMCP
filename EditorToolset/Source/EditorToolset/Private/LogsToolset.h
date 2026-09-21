@@ -29,12 +29,13 @@ public:
 	 * @param Pattern If non-empty, only returns entries whose text matches this regular
 	 *   expression.
 	 * @param MaxEntries Maximum number of entries to return, taken from the end of the log.
-	 *   Pass 0 for no limit. Defaults to 1000.
+	 *   Negative values use Editor Preferences > Plugins > Editor Toolset > Default Log Max Entries
+	 *   (initially 100). Pass 0 for no limit or a positive count to override the preference. Defaults to -1.
 	 * @return A list of matching log entries in chronological order.
 	 */
 	UFUNCTION(meta = (AICallable), Category = "LogsToolset")
 	static TArray<FString> GetLogEntries(
-		const FString& Category = TEXT(""), const FString& Pattern = TEXT(""), int32 MaxEntries = 1000);
+		const FString& Category = TEXT(""), const FString& Pattern = TEXT(""), int32 MaxEntries = -1);
 
 	/**
 	 * Returns a sorted list of registered log categories.

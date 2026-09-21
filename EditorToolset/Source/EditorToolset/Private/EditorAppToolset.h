@@ -210,12 +210,15 @@ public:
 	static FString GetCurrentLevel();
 
 	/*
-	 * Finds all console variables that contain a given name.
+	 * Finds console variables by name, returning current values without help text by default.
 	 * @param Name The partial or full name to search for.
-	 * @return A JSON dict with info about matching cvars.
+	 * Help text follows Editor Preferences > Plugins > Editor Toolset > Include CVar Help (default off).
+	 * @param MaxResults Negative uses the editor page-size preference (initially 25); 0 returns all remaining matches.
+	 * @param Offset Zero-based position in the name-sorted matches. Must be non-negative.
+	 * @return JSON with results, totalMatches, offset, returnedCount, hasMore, and nextOffset when more results exist.
 	 */
 	UFUNCTION(meta = (AICallable))
-	static FString SearchCVars(const FString& Name);
+	static FString SearchCVars(const FString& Name, int32 MaxResults = -1, int32 Offset = 0);
 
 	/*
 	 * Renders a thumbnail for the specified asset (e.g. static meshes, skeletal meshes,
@@ -390,7 +393,7 @@ public:
 	static bool IsPIERunning();
 
 private:
-	static TSharedPtr<FJsonObject> CVarToJson(IConsoleObject* CVar);
+	static TSharedPtr<FJsonObject> CVarToJson(IConsoleObject* CVar, bool bIncludeHelp);
 
 	/**
 	 * Returns a copy of the world-to-clip matrix, keeping version checks out of callers.
