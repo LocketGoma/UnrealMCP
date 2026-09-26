@@ -819,49 +819,21 @@ bool FModelContextProtocolServer::ProcessToolCallJsonRpcCall(const FHttpServerRe
 
 	FModelContextProtocolToolRequestId ToolRequestId(RequestId.ToSharedRef());
 
-	TSharedPtr<FJsonValue> ProgressToken;
-	const TSharedPtr<FJsonObject>* MetaParams = nullptr;
-	if (Params->TryGetObjectField(TEXT("_meta"), MetaParams))
-	{
-		if (MetaParams && MetaParams->IsValid())
-		{
-			ProgressToken = (*MetaParams)->TryGetField(TEXT("progressToken"));
-		}
-	}
-
-	// Only open a streamed text/event-stream response when the caller requested progress
-	// notifications (a progressToken). The empty first write exists solely to open the SSE stream so
-	// progress events can be pushed while the tool runs; an ordinary tool call has no progress events,
-	// so streaming its result as a second write over a keep-alive connection with no Content-Length
-	// (and no chunked-transfer path in the engine HTTP server) leaves HTTP/1.1 clients unable to frame
-	// the body. Those calls instead reply with a single application/json response below.
-	const bool bUseStreaming = ProgressToken.IsValid();
-
+	// UE 5.7's HTTPServer only permits one completion callback per request. It has no
+	// MultipleWriteStream support: opening an SSE response here and sending the result later
+	// asserts in FHttpConnection::CompleteRead, even when the tool finishes synchronously.
+	// Progress notifications are optional. Accept _meta.progressToken but use a single JSON
+	// response and leave EventStreamWrite unset so Tick/broadcasts cannot write prematurely.
 	FModelContextProtocolToolContext& Context = Session->ActiveRequests.Add(ToolRequestId);
 	Context.Tool = Tool;
-	Context.ProgressToken = ProgressToken;
 	Context.LastProgressSeconds = FPlatformTime::Seconds();
 
 	const FString SessionId = Session->ID;
 
-	if (bUseStreaming)
-	{
-		// Saving the callback for re-use with SSE event streaming.
-		Context.EventStreamWrite = OnComplete;
-
-		TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(FString(TEXT("")), UE::ModelContextProtocol::ContentTypeEventStream);
-		Response->Headers.Add(TEXT("Connection"), { TEXT("keep-alive") });
-		Response->Headers.Add(TEXT("Cache-Control"), { TEXT("no-cache") });
-		Response->Headers.Add(UE::ModelContextProtocol::Private::McpSessionIdHeader, { SessionId });
-		//EnumAddFlags(Response->Flags, EHttpServerResponseFlags::MultipleWriteStream | EHttpServerResponseFlags::HasAdditionalWrites);
-
-		OnComplete(MoveTemp(Response));
-	}
-
 	TWeakPtr<bool> WeakAlive = AliveGuard;
 	const double ToolCallStartTime = FPlatformTime::Seconds();
 	// Hop to the game thread only when needed; see `IModelContextProtocolTool::FResultCallback` for the contract. The synchronous game-thread path avoids a tick of latency.
-	auto HandleToolResult = [this, WeakAlive, RequestId, SessionId, ToolRequestId, ToolName, ToolArguments, ToolCallStartTime, OnComplete, bUseStreaming](const FModelContextProtocolToolResult& Result)
+	auto HandleToolResult = [this, WeakAlive, RequestId, SessionId, ToolRequestId, ToolName, ToolArguments, ToolCallStartTime, OnComplete](const FModelContextProtocolToolResult& Result)
 	{
 		checkf(IsInGameThread(), TEXT("MCP tool result handler must run on the game thread; see IModelContextProtocolTool::FResultCallback."));
 
@@ -869,10 +841,6 @@ bool FModelContextProtocolServer::ProcessToolCallJsonRpcCall(const FHttpServerRe
 		{
 			return;
 		}
-
-		FJsonDomBuilder::FObject ResponseObject;
-		ResponseObject.Set(TEXT("jsonrpc"), UE::ModelContextProtocol::JsonRpcVersion);
-		ResponseObject.Set(TEXT("id"), RequestId);
 
 		TSharedPtr<FModelContextProtocolSession> Session = FindSession(SessionId);
 
@@ -917,34 +885,10 @@ bool FModelContextProtocolServer::ProcessToolCallJsonRpcCall(const FHttpServerRe
 		}
 
 		TSharedPtr<FJsonValue> ResultValue = MakeShared<FJsonValueObject>(Result.JsonObject);
-		ResponseObject.Set(TEXT("result"), ResultValue);
 		Session->ActiveRequests.Remove(ToolRequestId);
 
-		if (!bUseStreaming)
-		{
-			// Ordinary (non-progress) tool call: reply with a single application/json response.
-			// FHttpServerResponse::Create frames it with a Content-Length, so HTTP/1.1 clients can
-			// detect end-of-message without a keep-alive stall, and the connection is never parked
-			// awaiting a second write. This is the same single-write path used by initialize, ping,
-			// tools/list, and the error responses above.
-			UE::ModelContextProtocol::Private::CompleteWithResult(OnComplete, RequestId, ResultValue, &SessionId);
-			return;
-		}
-
-		// Progress-streaming call: deliver the result as the final SSE write.
-		FUtf8String ResponseStr;
-		TSharedRef<TJsonWriter<UTF8CHAR, TCondensedJsonPrintPolicy<UTF8CHAR>>> JsonWriter = TJsonWriterFactory<UTF8CHAR, TCondensedJsonPrintPolicy<UTF8CHAR>>::Create(&ResponseStr);
-		FJsonSerializer::Serialize(ResponseObject.AsJsonObject(), JsonWriter);
-
-		TUniquePtr<FHttpServerResponse> ServerResponse = FHttpServerResponse::Create(UE::ModelContextProtocol::Private::FormatSSEMessage(ResponseStr), UE::ModelContextProtocol::ContentTypeEventStream);
-		// `CloseAfterWrite` instructs the HTTPServer to tear down the connection after this final
-		// SSE write completes. Required because the response carries no Content-Length and the
-		// engine has no chunked-transfer path: HTTP/1.1 clients (libcurl, browser fetch) cannot
-		// detect end-of-message on the unframed body and would otherwise stall ~15s waiting for
-		// the keep-alive timeout to close the socket.
-		//EnumAddFlags(ServerResponse->Flags, EHttpServerResponseFlags::MultipleWriteStream | EHttpServerResponseFlags::SkipHeaderWrite | EHttpServerResponseFlags::CloseAfterWrite);
-
-		OnComplete(MoveTemp(ServerResponse));
+		// One framed response, including when the client requested progress notifications.
+		UE::ModelContextProtocol::Private::CompleteWithResult(OnComplete, RequestId, ResultValue, &SessionId);
 	};
 
 	Tool->RunAsync(ToolRequestId, ToolArguments,

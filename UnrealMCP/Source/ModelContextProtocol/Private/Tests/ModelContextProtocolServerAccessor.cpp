@@ -10,6 +10,14 @@
 
 namespace UE::ModelContextProtocol
 {
+	bool FServerAccessor::ProcessToolCall(FModelContextProtocolServer& Server, const TSharedPtr<FJsonObject>& Params, const FHttpResultCallback& OnComplete)
+	{
+		TSharedRef<FModelContextProtocolSession> Session = MakeShared<FModelContextProtocolSession>();
+		Session->Status = EModelContextProtocolSessionStatus::Initialized;
+		Server.Sessions.Add(Session);
+		return Server.ProcessToolCallJsonRpcCall(FHttpServerRequest(), MakeShared<FJsonValueNumber>(1), Params, Session, OnComplete);
+	}
+
 	void FServerAccessor::AddInitializedSessionWithEventStream(FModelContextProtocolServer& Server, const FHttpResultCallback& StreamWrite)
 	{
 		TSharedPtr<FModelContextProtocolSession> Session = MakeShared<FModelContextProtocolSession>();

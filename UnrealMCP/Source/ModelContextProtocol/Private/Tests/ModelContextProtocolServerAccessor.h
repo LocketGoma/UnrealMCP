@@ -4,6 +4,7 @@
 #include "HttpResultCallback.h"
 
 class FModelContextProtocolServer;
+class FJsonObject;
 
 namespace UE::ModelContextProtocol
 {
@@ -13,6 +14,9 @@ namespace UE::ModelContextProtocol
 	class FServerAccessor
 	{
 	public:
+		// Dispatch a tool call in an initialized session without opening a network listener.
+		static MODELCONTEXTPROTOCOL_API bool ProcessToolCall(FModelContextProtocolServer& Server, const TSharedPtr<FJsonObject>& Params, const FHttpResultCallback& OnComplete);
+
 		// Inject one Initialized session that owns a single ActiveRequest whose EventStreamWrite is the given callback.
 		static MODELCONTEXTPROTOCOL_API void AddInitializedSessionWithEventStream(FModelContextProtocolServer& Server, const FHttpResultCallback& StreamWrite);
 
